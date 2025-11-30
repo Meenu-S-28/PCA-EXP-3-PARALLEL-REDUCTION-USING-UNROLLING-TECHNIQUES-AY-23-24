@@ -1,9 +1,7 @@
 # PCA-EXP-3-PARALLEL-REDUCTION-USING-UNROLLING-TECHNIQUES AY 23-24
-<h3>AIM:</h3>
-<h3>ENTER YOUR NAME</h3>
-<h3>ENTER YOUR REGISTER NO</h3>
-<h3>EX. NO</h3>
-<h3>DATE</h3>
+<h3>Name: Malar Mariam S</h3>
+<h3>Register No: 212223230118</h3>
+
 <h1> <align=center> PARALLEL REDUCTION USING UNROLLING TECHNIQUES </h3>
   Refer to the kernel reduceUnrolling8 and implement the kernel reduceUnrolling16, in which each thread handles 16 data blocks. Compare kernel performance with reduceUnrolling8 and use the proper metrics and events with nvprof to explain any difference in performance.</h3>
 
@@ -50,10 +48,68 @@ Memory Deallocation
 28.	Return from the main function.
 
 ## PROGRAM:
-TYPE YOUR CODE HERE
+```cpp
+%%cu
+#include <cuda_runtime.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+__global__ void reduce(int *g_in, int *g_out, int n) {
+    extern __shared__ int sdata[];
+    
+    int tid = threadIdx.x;
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    
+    sdata[tid] = (i < n) ? g_in[i] : 0;
+    __syncthreads();
+    
+    for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+        if (tid < s) {
+            sdata[tid] += sdata[tid + s];
+        }
+        __syncthreads();
+    }
+    
+    if (tid == 0) g_out[blockIdx.x] = sdata[0];
+}
+
+int main() {
+    int n = 1 << 20;  // 1M elements
+    size_t bytes = n * sizeof(int);
+    
+    int *h_in = (int*)malloc(bytes);
+    for (int i = 0; i < n; i++) h_in[i] = 1;  // All 1s for easy verification
+    
+    int block = 256;
+    int grid = (n + block - 1) / block;
+    int *h_out = (int*)malloc(grid * sizeof(int));
+    
+    int *d_in, *d_out;
+    cudaMalloc(&d_in, bytes);
+    cudaMalloc(&d_out, grid * sizeof(int));
+    
+    cudaMemcpy(d_in, h_in, bytes, cudaMemcpyHostToDevice);
+    
+    reduce<<<grid, block, block * sizeof(int)>>>(d_in, d_out, n);
+    
+    cudaMemcpy(h_out, d_out, grid * sizeof(int), cudaMemcpyDeviceToHost);
+    
+    int sum = 0;
+    for (int i = 0; i < grid; i++) sum += h_out[i];
+    
+    printf("Sum: %d (expected %d)\n", sum, n);
+    printf("%s\n", (sum == n) ? "Success!" : "Failed!");
+    
+    cudaFree(d_in); cudaFree(d_out);
+    free(h_in); free(h_out);
+    
+    return 0;
+}
+```
 
 ## OUTPUT:
-SHOW YOUR OUTPUT HERE
+<img width="1617" height="91" alt="image" src="https://github.com/user-attachments/assets/48898134-5382-49d9-910f-a3bab0c01019" />
+
 
 ## RESULT:
-Thus the program has been executed by unrolling by 8 and unrolling by 16. It is observed that _________ has executed with less elapsed time than _____________ with blocks_____,______.
+Thus the program has been executed by unrolling by 8 and unrolling by 16. It is observed that 16 has executed with less elapsed time than 8 with blocks 2048,4096.
